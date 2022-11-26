@@ -134,11 +134,14 @@ Notation "@ n [ k ]"  := (EProp n k) (in custom ent_expr at level 30,
 Notation "@ n"      := (EName n) (in custom ent_expr at level 30, n constr at level 0, format "@ n").
 
 (** Graph **)
+
+Definition properties := Map string value.
+
 Inductive node : Type :=
-  | Node (node : id) (label : string) (prop : Map string value).
+  | Node (node : id) (label : string) (prop : properties).
 
 Inductive rel : Type :=
-  | Rel (src tgt rel : id) (reltype : string) (prop : Map string value).
+  | Rel (src tgt rel : id) (reltype : string) (prop : properties).
 
 Inductive graph : Type :=
   | GEmpty  : graph
@@ -162,12 +165,94 @@ Notation "g ; -( s )--[ i type props ]->-( t )-" := (GRel (Rel (NodeId s) (NodeI
                                                      props constr at level 0, t constr at level 0,
                                                      format "g ; '//' -(  s  )--[  i  type  props  ]->-(  t  )-").
 
-Check G<>G.
-Check G< 
-  -( 2 "test2" [("name", VStr "Ethan"); ("age", VNum 19)] )- ;
-  -( 1 )--[ 10 "test" [("name", VStr "Ethan"); ("age", VNum 19)] ]->-( 2 )- ;
-  -( 1 "test1" [("name", VStr "Ethan"); ("age", VNum 19)] )-
->G.
+Record graph_rd := mkGraph
+{ 
+  (* Set of nodes and their properties *)
+  g_nodes : Map id properties
+  (* Set of relationships and their properties*)
+; g_rels : Map id properties
+  (* Map a relationship to its source node*)
+; g_src : Map id id
+  (* Map a relationship to its target node*)
+; g_tgt : Map id id
+  (* Map a node to a label *)
+; g_lambda : Map id string
+  (* Map a relationship to a relationship type *)
+; g_tau : Map id string
+}.
+
+Definition empty_graph_rd := {|
+  g_nodes := nil;
+  g_rels := nil;
+  g_src := nil;
+  g_tgt := nil;
+  g_lambda := nil;
+  g_tau := nil
+|}.
+
+Definition id_graph (g : graph_rd) : graph_rd :=
+  let (g_nodes', g_rels', g_src', g_tgt', g_lambda', g_tau') := g in
+  mkGraph
+    g_nodes'
+    g_rels'
+    g_src'
+    g_tgt'
+    g_lambda'
+    g_tau'.
+
+Fixpoint to_graph_rd (g : graph) : graph_rd :=
+  match g with
+  | GEmpty => empty_graph_rd
+  | GNode (Node id label prop) g' =>
+    let (g_nodes', g_rels', g_src', g_tgt', g_lambda', g_tau') := to_graph_rd g' in
+    {|
+      g_nodes := map_set g_nodes' id prop
+    ; g_rels := g_rels'
+    ; g_src := g_src'
+    ; g_tgt := g_tgt'
+    ; g_lambda := map_set g_lambda' id label
+    ; g_tau := g_tau'
+    |}
+  | GRel (Rel src tgt id reltype prop) g' =>
+    let (g_nodes', g_rels', g_src', g_tgt', g_lambda', g_tau') := to_graph_rd g' in
+    {|
+      g_nodes := g_nodes'
+    ; g_rels := map_set g_rels' id prop
+    ; g_src := map_set g_src' id src
+    ; g_tgt := map_set g_tgt' id tgt
+    ; g_lambda := g_lambda'
+    ; g_tau := map_set g_tau' id reltype
+    |}
+  end.
+
+Definition empty_graph := G<>G.
+Definition test_graph := G<
+    -( 1 "person" [("name", VStr "Alice"); ("age", VNum 23)] )-;
+    -( 2 "person" [("name", VStr "Bob"); ("age", VNum 24)] )-;
+    -( 3 "person" [("name", VStr "Charlie"); ("age", VNum 30)] )-;
+    -( 4 "organization" [("name", VStr "Google"); ("area", VStr "technology")] )-;
+    -( 5 "organization" [("name", VStr "Microsoft"); ("area", VStr "technology")] )-;
+    -( 6 "organization" [("name", VStr "University of Maryland"); ("area", VStr "education")] )-;
+    -( 7 "organization" [("name", VStr "University of Washington"); ("area", VStr "education")] )-;
+    -( 8 "state" [("name", VStr "Washington")] )-;
+    -( 9 "state" [("name", VStr "New York")] )-;
+    -( 10 "state" [("name", VStr "Maryland")] )-;
+    -( 1 )--[ 1 "works_at" [] ]->-( 4 )-;
+    -( 1 )--[ 2 "from" [] ]->-( 9 )-;
+    -( 1 )--[ 3 "studied_at" [] ]->-( 6 )-;
+    -( 2 )--[ 4 "works_at" [] ]->-( 4 )-;
+    -( 2 )--[ 5 "from" [] ]->-( 10 )-;
+    -( 2 )--[ 6 "studied_at" [] ]->-( 7 )-;
+    -( 3 )--[ 7 "works_at" [] ]->-( 5 )-;
+    -( 3 )--[ 8 "from" [] ]->-( 8 )-;
+    -( 3 )--[ 9 "studied_at" [] ]->-( 6 )-;
+    -( 4 )--[ 10 "locates_in" [] ]->-( 9 )-;
+    -( 5 )--[ 11 "locates_in" [] ]->-( 8 )-;
+    -( 6 )--[ 12 "locates_in" [] ]->-( 10 )-;
+    -( 7 )--[ 13 "locates_in" [] ]->-( 8 )-
+  >G.
+
+Definition test_graph_rd := to_graph_rd test_graph.
 
 (** Pattern **)
 
@@ -252,13 +337,7 @@ Check MATCH -( :"b":"c" [] )- -[ :"b" 2 [] ]-> -( :"c" [] )-
       RETURN <{ @"cd"["abc"] }> AS "abc",
              <{ @"ab" }> AS "bcd",
              <{ 1 }> AS "num",
-             <{ 1 + 2 + 3 }> AS "num".
-
-
-
-
-
-
+             <{ 1 + 2 + 3 }> AS "num".             
 
 (** Table **)
 Inductive name : Type :=
@@ -266,6 +345,10 @@ Inductive name : Type :=
 
 Definition record := Map name value.
 Definition table := list record.
+
+
+(*************************************************************************************************)
+(*************************************************************************************************)
 
 Definition label := string.
 Definition reltype := string.
