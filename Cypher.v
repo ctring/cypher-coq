@@ -48,6 +48,12 @@ Fixpoint eq_path_aux (p1 p2 : path) :=
   eqb := eq_path_aux
 }.
 
+Definition hd_path p :=
+  match p with
+  | PNode i => i
+  | PMulti i _ _ => i
+  end.
+
 Notation "-( n )-" := (PNode (NodeId n)) (at level 0, format "-(  n  )-").
 Notation "-( x )--[ r ]- p" := (PMulti (NodeId x) (RelId r) p)
                             (at level 0, right associativity,
@@ -172,11 +178,29 @@ Notation "@ n"      := (EName n) (in custom ent_expr at level 30, n constr at le
 
 Definition properties := Map string value.
 
-Inductive node : Type :=
-  | Node (node : id) (label : string) (prop : properties).
+Record node := Node
+{
+  (* Id of the node *)
+  n_id    : id
+  (* Label of the node *)
+; n_label : string
+  (* Properties of the node *)
+; n_prop  : properties 
+}.
 
-Inductive rel : Type :=
-  | Rel (src tgt rel : id) (reltype : string) (prop : properties).
+Record rel := Rel
+{
+  (* Id of the source node *)
+  r_src   : id
+  (* Id of the target node *)
+; r_tgt   : id
+  (* Id of the relationship *)
+; r_id    : id
+  (* Type of the relationship *)
+; r_type  : string 
+  (* Properties of the relationship *)
+; r_prop  : properties
+}.
 
 Inductive graph : Type :=
   | GEmpty  : graph
@@ -185,7 +209,7 @@ Inductive graph : Type :=
 
 Declare Custom Entry ent_graph.
 Notation "'G<>G'" := GEmpty (at level 0, only parsing).
-Notation "'G<' e '>G'" := e (at level 0, only parsing, e custom ent_graph at level 99, format "'G<' '[' '//' e ']' '//' '>G'").
+Notation "'G<' e '>G'" := e (at level 0, only parsing, e custom ent_graph at level 99).
 Notation "-( i lbl props )-" := (GNode (Node (NodeId i) lbl props) GEmpty)
                                 (in custom ent_graph at level 0,
                                  i constr at level 0, lbl constr at level 0, props constr at level 0,
@@ -200,7 +224,21 @@ Notation "g ; -( s )--[ i type props ]->-( t )-" := (GRel (Rel (NodeId s) (NodeI
                                                      props constr at level 0, t constr at level 0,
                                                      format "g ; '//' -(  s  )--[  i  type  props  ]->-(  t  )-").
 
-Record graph_rd := mkGraph
+Fixpoint get_nodes (g : graph) : list node :=
+  match g with
+  | GEmpty => []
+  | GNode n g' => n :: (get_nodes g')
+  | GRel _ g' => get_nodes g'
+  end.
+
+Fixpoint get_rels (g : graph) : list rel :=
+  match g with
+  | GEmpty => []
+  | GNode _ g' => get_rels g'
+  | GRel r g' => r :: get_rels g'
+  end.
+
+(* Record graph := Graph
 { 
   (* Set of nodes and their properties *)
   g_nodes : Map id properties
@@ -214,15 +252,15 @@ Record graph_rd := mkGraph
 ; g_lambda : Map id string
   (* Map a relationship to a relationship type *)
 ; g_tau : Map id string
-}.
+}. *)
 
-Definition empty_graph_rd := mkGraph nil nil nil nil nil nil.
+(* Definition empty_graph := Graph nil nil nil nil nil nil. *)
 
-Fixpoint to_graph_rd (g : graph) : graph_rd :=
-  match g with
-  | GEmpty => empty_graph_rd
-  | GNode (Node id label prop) g' =>
-    let (g_nodes', g_rels', g_src', g_tgt', g_lambda', g_tau') := to_graph_rd g' in
+(* Fixpoint to_graph (gc : graph_cons) : graph :=
+  match gc with
+  | GEmpty => empty_graph
+  | GNode (Node id label prop) gc' =>
+    let (g_nodes', g_rels', g_src', g_tgt', g_lambda', g_tau') := to_graph gc' in
     {|
       g_nodes := map_set g_nodes' id prop
     ; g_rels := g_rels'
@@ -231,8 +269,8 @@ Fixpoint to_graph_rd (g : graph) : graph_rd :=
     ; g_lambda := map_set g_lambda' id label
     ; g_tau := g_tau'
     |}
-  | GRel (Rel src tgt id reltype prop) g' =>
-    let (g_nodes', g_rels', g_src', g_tgt', g_lambda', g_tau') := to_graph_rd g' in
+  | GRel (Rel src tgt id reltype prop) gc' =>
+    let (g_nodes', g_rels', g_src', g_tgt', g_lambda', g_tau') := to_graph gc' in
     {|
       g_nodes := g_nodes'
     ; g_rels := map_set g_rels' id prop
@@ -241,7 +279,7 @@ Fixpoint to_graph_rd (g : graph) : graph_rd :=
     ; g_lambda := g_lambda'
     ; g_tau := map_set g_tau' id reltype
     |}
-  end.
+  end. *)
 
 Definition empty_graph := G<>G.
 Definition test_graph := G<
@@ -270,27 +308,40 @@ Definition test_graph := G<
     -( 7 )--[ 13 "locates_in" [] ]->-( 8 )-
   >G.
 
-Definition test_graph_rd := to_graph_rd test_graph.
+(* Definition test_graph := to_graph test_graph_cons. *)
 
-(** Pattern **)
-
-Inductive node_pat : Type :=
-  | NodePat (name : option string) (labels : list string) (prop : properties).
+Record node_pat := NodePat
+{
+  (* Name to bind to the matching nodes *)
+  np_name   : option string
+  (* Node labels to match with *)
+; np_labels : list string
+  (* Node properties to match with *)
+; np_prop   : properties
+}.
 
 Inductive direction : Type :=
   | left2right
   | right2left
   | undirected.
 
-Inductive rel_pat : Type :=
-  | RelPat (dir : direction) (name : option string) 
-           (types : list string) (len : nat)
-           (prop : properties).
+Record rel_pat := RelPat
+{
+  (* Relationship direction to match with *)
+  rp_dir    : direction
+  (* Name to bind to the matching relations *)
+; rp_name   : option string 
+  (* Relationship types to match with *)
+; rp_types  : list string 
+  (* Number of relationships to match with *)
+; rp_len    : nat
+  (* Relationship properties to match with *)
+; rp_prop   : properties
+}.
 
 Inductive pattern : Type :=
   | PatNode : node_pat -> pattern
   | PatNodeRel : node_pat -> rel_pat -> pattern -> pattern.
-
 
 Declare Custom Entry ent_pat.
 Declare Custom Entry ent_rel.
@@ -330,26 +381,24 @@ Notation "-[ types m prop ]-" := (RelPat undirected None types m prop)
                                     (in custom ent_rel at level 0,
                                      types custom ent_pat at level 0, m constr at level 0,
                                       prop constr at level 0).
-Notation "-( a lbl prop )- r  p" := (PatNodeRel (NodePat (Some a) lbl prop) r p)
+Notation "-( a lbl prop )- r p" := (PatNodeRel (NodePat (Some a) lbl prop) r p)
                                     (in custom ent_pat at level 99, right associativity,
-                                     a constr at level 0, prop constr at level 0, r custom ent_rel at level 0,
-                                     format "'-('  a  lbl  prop  ')-' r p").
-Notation "-( lbl prop )- r  p" := (PatNodeRel (NodePat None lbl prop) r p)
+                                     a constr at level 0, prop constr at level 0, r custom ent_rel at level 0).
+Notation "-( lbl prop )- r p" := (PatNodeRel (NodePat None lbl prop) r p)
                                   (in custom ent_pat at level 99, right associativity,
-                                   prop constr at level 0, r custom ent_rel at level 0,
-                                   format "'-('  lbl  prop  ')-' r p").
+                                   prop constr at level 0, r custom ent_rel at level 0).
 
 Check ?? -( :"b":"c" [] )- ??.
 Check ?? -( :"b":"c" [] )- <-[ "test" :"a":"b" 1 [] ]- -( "test" :"b":"c" [] )- ??.
 
 
 (** Query **)
-Record Query := mkQuery { pat : pattern ; ret : list (expr * string) }.
+Record query := Query { pat : pattern ; ret : list (expr * string) }.
 
 Declare Custom Entry ent_ret.
 Notation "'RETURN' x , .. , y" := (cons x .. (cons y nil) ..) (in custom ent_ret at level 99).
 Notation "x 'AS' a" := (x, a) (in custom ent_ret at level 90, x constr at level 0, a constr at level 0).
-Notation "'MATCH' p r" := (mkQuery p r) (at level 90, p custom ent_pat at level 0, r custom ent_ret at level 0). 
+Notation "'MATCH' p r" := (Query p r) (at level 90, p custom ent_pat at level 0, r custom ent_ret at level 0). 
 
 Check MATCH -( :"b":"c" [] )- -[ :"b" 2 [] ]-> -( :"c" [] )-
       RETURN <{ @"cd"["abc"] }> AS "abc",
@@ -357,87 +406,116 @@ Check MATCH -( :"b":"c" [] )- -[ :"b" 2 [] ]-> -( :"c" [] )-
              <{ 1 }> AS "num",
              <{ 1 + 2 + 3 }> AS "num".             
 
-(*************************************************************************************************)
-(*************************************************************************************************)
+(***************************************************************************)
+(****************************  PATTERN MATCHING ****************************)
+(***************************************************************************)
 
-Fixpoint id_in_path (p : path) (i : id) : bool :=
+Fixpoint id_in_path (i : id) (p : path) : bool :=
   match p with
   | PNode _ => false
   | PMulti id1 id2 p' => if eqb i id1 then true else
-                          if eqb i id2 then true else id_in_path p' i
+                         if eqb i id2 then true else id_in_path i p'
   end.
 
 Definition test_path := -(1)--[1]--(4)--[4]--(2)--[6]--(7)-.
 
-Example in_path1 : id_in_path test_path (RelId 1) = true.
+Example in_path1 : id_in_path (RelId 1) test_path = true.
 Proof.
   reflexivity.
 Qed.
 
-Example in_path2 : id_in_path test_path (NodeId 2) = true.
+Example in_path2 : id_in_path (NodeId 2) test_path = true.
 Proof.
   reflexivity.
 Qed.
 
-Example not_in_path : id_in_path test_path (RelId 10) = false.
+Example not_in_path : id_in_path (RelId 10) test_path = false.
 Proof.
   reflexivity.
 Qed.
 
-Definition match_rel_pat (r : rel) (p : rel_pat) : bool :=
-  match r, p with
-  | Rel _ _ _ reltype prop , RelPat _ _ types _ prop_pat =>
-    (existsb (fun t => t =? reltype) types) && (map_includes prop prop_pat)
-  end.
+Definition match_node_pat (np : node_pat) (n : node) : bool :=
+  (existsb (fun l => l =? (n_label n)) (np_labels np))
+  &&
+  (map_includes (n_prop n) (np_prop np)).
 
-Example match_rel_pat1 : match_rel_pat (Rel (NodeId 0) (NodeId 0) (NodeId 0) "foo" [("a", VNum 1); ("b", VStr "c")])
-                                       (RelPat undirected None ["foo"; "bar"] 1 [("a", VNum 1)])
+Example match_node_pat1 : match_node_pat (NodePat None ["foo"; "bar"] [("a", VNum 1)])
+                                         (Node (NodeId 0) "foo" [("a", VNum 1); ("b", VStr "c")])
+                                         = true.
+Proof.
+  reflexivity.
+Qed.
+
+Example match_node_pat2 : match_node_pat (NodePat None ["foo"; "bar"] [("a", VNum 1)])
+                                         (Node (NodeId 0) "foo" [("b", VStr "c")])
+                                         = false.
+Proof.
+  reflexivity.
+Qed.
+
+Example match_node_pat3 : match_node_pat (NodePat None ["foo"; "bar"] [])
+                                         (Node (NodeId 0) "far" [("b", VStr "c")])
+                                         = false.
+Proof.
+  reflexivity.
+Qed.
+
+Definition match_rel_pat (rp : rel_pat) (r : rel) : bool :=
+  (existsb (fun t => t =? (r_type r)) (rp_types rp))
+  &&
+  (map_includes (r_prop r) (rp_prop rp)).
+
+Example match_rel_pat1 : match_rel_pat (RelPat undirected None ["foo"; "bar"] 1 [("a", VNum 1)])
+                                       (Rel (NodeId 0) (NodeId 0) (NodeId 0) "foo" [("a", VNum 1); ("b", VStr "c")])
                                        = true.
 Proof.
   reflexivity.
 Qed.
 
-Example match_rel_pat2 : match_rel_pat (Rel (NodeId 0) (NodeId 0) (NodeId 0) "foo" [("a", VNum 1); ("b", VStr "c")])
-                                       (RelPat undirected None ["foo"; "bar"] 1 [("c", VNum 1)])
+Example match_rel_pat2 : match_rel_pat (RelPat undirected None ["foo"; "bar"] 1 [("c", VNum 1)])
+                                       (Rel (NodeId 0) (NodeId 0) (NodeId 0) "foo" [("a", VNum 1); ("b", VStr "c")])
                                        = false.
 Proof.
   reflexivity.
 Qed.
 
-Example match_rel_pat3 : match_rel_pat (Rel (NodeId 0) (NodeId 0) (NodeId 0) "foo" [("a", VNum 1); ("b", VStr "c")])
-                                       (RelPat undirected None ["far"] 1 [])
+Example match_rel_pat3 : match_rel_pat (RelPat undirected None ["far"] 1 [])
+                                       (Rel (NodeId 0) (NodeId 0) (NodeId 0) "foo" [("a", VNum 1); ("b", VStr "c")])
                                        = false.
 Proof.
   reflexivity.
 Qed.
 
-Fixpoint refine_paths (g : graph_rd) (init_paths : list path) (n : node_pat) (r : rel_pat) : list path :=
-  match init_paths with
-  | [] => []
-  | path :: init_paths' => 
-  end.
+(*
+  Determine if a relationship (r) can connect the head of the path (head)
+  to a matching node (m_nodes) while satisfying the relationship pattern (rp).
+  Return a pair of (rel_id, node_id) if the relationship  matches the pattern,
+  return None otherwise.
+*)
+Definition match_direction (head : id) (node_ids : list id)
+                           (rp : rel_pat) (r : rel) : option (id * id) :=
+  let hd_matches_src := eqb head (r_src r) in
+  let hd_matches_tgt := eqb head (r_tgt r) in
+  let src_in_nodes := existsb (fun n => eqb n (r_src r)) node_ids in
+  let tgt_in_nodes := existsb (fun n => eqb n (r_tgt r)) node_ids in
+    match (rp_dir rp) with
+    | left2right => if hd_matches_src && tgt_in_nodes then Some ((r_tgt r), (r_id r)) else None
+    | right2left => if hd_matches_tgt && src_in_nodes then Some ((r_src r), (r_id r)) else None
+    | undirected => if hd_matches_src && tgt_in_nodes then Some ((r_tgt r), (r_id r)) else
+                    if hd_matches_tgt && src_in_nodes then Some ((r_src r), (r_id r)) else
+                    None
+    end.
 
-Definition label := string.
-Definition reltype := string.
+Definition refine_paths_extend (g : graph) (np : node_pat) (rp : rel_pat) (p : path) : list path :=
+  let nodes := filter (match_node_pat np) (get_nodes g) in
+  let rels  := filter (match_rel_pat rp) (get_rels g) in
+  let nodes_rels := map (match_direction (hd_path p) (map n_id nodes) rp) rels in
+    fold_left (fun ep nr => match nr with
+                            | None => ep
+                            | Some (nid, rid) => (PMulti nid rid p) :: ep
+                            end)  
+              nodes_rels [].
 
-Definition is_subset (x y : set id) : bool :=
-  match set_diff id_eq_dec x y with
-  | nil => true
-  | _ => false
-  end.
+Definition refine_paths (g : graph) (np : node_pat) (rp : rel_pat) (prev_paths : list path) : list path :=
+  flat_map (refine_paths_extend g np rp) prev_paths.
 
-Definition is_set_eq (x y : set id) : bool := (is_subset x y) && (is_subset y x).
-
-Definition is_graph_well_formed (g: Graph) : bool :=
-  let (N, R, src, tgt, lambda, tau) := g in
-  let Nid := map_id_dom N in
-  let Rid := map_id_dom R in
-    (is_set_eq (map_id_dom src) Rid) &&
-    (is_subset (map_id_val src) Nid) &&
-    (is_set_eq (map_id_dom tgt) Rid) &&
-    (is_subset (map_id_val tgt) Nid) &&
-    (is_subset (map_id_dom lambda) Nid) &&
-    (is_subset (map_id_dom tau) Rid).
-
-
-(** Path **)
