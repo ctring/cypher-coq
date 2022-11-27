@@ -1,33 +1,33 @@
-From Coq Require Import Arith.Peano_dec.
-From Coq Require Import Bool.Bool. Import BoolNotations.
-From Coq Require Import Lists.ListSet. 
-From Coq Require Import Lists.List. Import ListNotations.
 From Coq Require Import Strings.String.
+From Coq Require Import PeanoNat.
+From Coq Require Import Bool.Bool. Import BoolNotations.
+From Coq Require Import Lists.List. Import ListNotations.
+From Cypher Require Import Decidability.
 From Cypher Require Import Map.
 
-Local Open Scope string.
-
+Open Scope string.
 (** Values **)
 
 Inductive id : Type :=
   | NodeId : nat -> id
   | RelId  : nat -> id.
+  
+#[export] Instance eq_id : Eq id :=
+{
+  eqb i1 i2 := match i1, i2 with
+               | NodeId n1, NodeId n2 => (n1 =? n2)%nat
+               | RelId n1, RelId n2 => (n1 =? n2)%nat
+               | _, _ => false
+               end
+}.
 
-Lemma id_dec : decidable_eq id.
+#[export] Instance eqdec_id : EqDec id.
 Proof.
-  repeat decide equality.
-Defined.
-
-Definition map_id_dom {V} := @map_dom id V id_dec.
-Definition map_id_val := @map_values id id id_dec id_dec.
-
-#[global]
-Hint Resolve id_dec : typeclass_instances.
-
-Inductive null : Type :=
-  | Null.
-
-Section Path.
+  constructor. 
+  intros; destruct x; destruct y; split; intros; simpl; try discriminate; auto;
+  try (unfold eqb in H; unfold eq_id in H; apply Nat.eqb_eq in H; auto);
+  try (injection H; intros; apply Nat.eqb_eq; assumption).
+Qed.
 
 Inductive path : Type :=
   (* path with a single node *)
@@ -35,23 +35,36 @@ Inductive path : Type :=
   (* path with multiple nodes *)
   | PMulti : id -> id -> path -> path.
 
+Fixpoint eq_path_aux (p1 p2 : path) :=
+  match p1, p2 with
+  | PNode i1, PNode i2 => (eqb i1 i2)
+  | PMulti ia1 ib1 p1, PMulti ia2 ib2 p2 =>
+    (eqb ia1 ia2) && (eqb ib1 ib2) && (eq_path_aux p1 p2)
+  | _, _ => false
+  end. 
+
+#[export] Instance eq_path : Eq path :=
+{
+  eqb := eq_path_aux
+}.
+
 Notation "-( n )-" := (PNode (NodeId n)) (at level 0, format "-(  n  )-").
-Notation "-( x )---[ r ]-- p" := (PMulti (NodeId x) (RelId r) p)
+Notation "-( x )--[ r ]- p" := (PMulti (NodeId x) (RelId r) p)
                             (at level 0, right associativity,
-                             format "-(  x  )---[  r  ]-- p").
+                             format "-(  x  )--[  r  ]- p").
 
 Inductive well_formed_path : path -> Prop :=
   | WFNode : forall (n : nat),
               well_formed_path -( n )-
   | WFMulti : forall (n r : nat) (p : path),
-               well_formed_path p -> well_formed_path -( n )---[ r ]--p.
+               well_formed_path p -> well_formed_path -( n )--[ r ]-p.
 
 Example wfp1 : well_formed_path -(1)-.
 Proof.
   apply WFNode.
 Qed.
 
-Example wfp3 : well_formed_path -(1)---[2]---(3)---[4]---(5)-.
+Example wfp3 : well_formed_path -(1)--[2]--(3)--[4]--(5)-.
 Proof.
   repeat apply WFMulti. apply WFNode.
 Qed.
@@ -72,24 +85,47 @@ Proof.
   unfold not. intros H.
   inversion H. inversion H1.
 Qed.
-End Path.
 
 Inductive value : Type :=
+  | VNull : value
   | VId   : id -> value
-  | VNull : null -> value
   | VNum  : nat -> value
-  | VStr  : string -> value
-  | VPath : path -> value.
+  | VStr  : string -> value.
 
+#[export] Instance eq_value : Eq value :=
+{
+  eqb v1 v2 := match v1, v2 with
+               | VId i1, VId i2 => (eqb i1 i2)
+               | VNull, VNull => true
+               | VNum n1, VNum n2 => (n1 =? n2)%nat
+               | VStr s1, VStr s2 => (s1 =? s2)%string
+               | _, _ => false
+               end
+}.
+
+#[export] Instance eqdec_value : EqDec value.
+Proof.
+  constructor.
+  intros; destruct x; destruct y; split; intros; simpl; try discriminate; auto;
+  unfold eqb in H; unfold eq_value in H.
+  - apply (@eqb_eq id eq_id eqdec_id) in H. rewrite H. reflexivity.
+  - injection H as H. apply (@eqb_eq id eq_id eqdec_id). assumption.
+  - apply Nat.eqb_eq in H. rewrite H. reflexivity.  
+  - injection H as H. apply Nat.eqb_eq. assumption.
+  - apply String.eqb_eq in H. rewrite H. reflexivity.
+  - injection H as H. apply String.eqb_eq. assumption.
+Qed.
+    
 Coercion VId : id >-> value.
-Coercion VNull : null >-> value.
 Coercion VNum : nat >-> value.
 Coercion VStr : string >-> value.
-Coercion VPath : path >-> value.
 
+(** Table **)
+Inductive name : Type :=
+  | Name : string -> name.
 
-Definition test (x : value) := x.
-Compute (test "abc").
+Definition record := Map name value.
+Definition table := list record.
 
 (** Expressions **)
 
@@ -99,7 +135,7 @@ Inductive expr : Type :=
   (* Name *)
   | EName : string -> expr
   (* Null *)
-  | ENull : value -> expr
+  | ENull : expr
   (* Number *)
   | ENum : value -> expr
   | EPlus : expr -> expr -> expr
@@ -115,10 +151,9 @@ Inductive expr : Type :=
 Definition value_to_expr v :=
   match v with
   | VId _ => EId v
-  | VNull _ => ENull v
+  | VNull => ENull
   | VNum _ => ENum v
   | VStr _ => EStr v
-  | VPath _ => EPath v
   end.
 
 Coercion value_to_expr : value >-> expr. 
@@ -181,24 +216,7 @@ Record graph_rd := mkGraph
 ; g_tau : Map id string
 }.
 
-Definition empty_graph_rd := {|
-  g_nodes := nil;
-  g_rels := nil;
-  g_src := nil;
-  g_tgt := nil;
-  g_lambda := nil;
-  g_tau := nil
-|}.
-
-Definition id_graph (g : graph_rd) : graph_rd :=
-  let (g_nodes', g_rels', g_src', g_tgt', g_lambda', g_tau') := g in
-  mkGraph
-    g_nodes'
-    g_rels'
-    g_src'
-    g_tgt'
-    g_lambda'
-    g_tau'.
+Definition empty_graph_rd := mkGraph nil nil nil nil nil nil.
 
 Fixpoint to_graph_rd (g : graph) : graph_rd :=
   match g with
@@ -257,7 +275,7 @@ Definition test_graph_rd := to_graph_rd test_graph.
 (** Pattern **)
 
 Inductive node_pat : Type :=
-  | NodePat (name : option string) (labels : list string) (prop : Map string expr).
+  | NodePat (name : option string) (labels : list string) (prop : properties).
 
 Inductive direction : Type :=
   | left2right
@@ -267,7 +285,7 @@ Inductive direction : Type :=
 Inductive rel_pat : Type :=
   | RelPat (dir : direction) (name : option string) 
            (types : list string) (len : nat)
-           (prop : Map string expr).
+           (prop : properties).
 
 Inductive pattern : Type :=
   | PatNode : node_pat -> pattern
@@ -304,11 +322,11 @@ Notation "-[ types m prop ]->" := (RelPat left2right None types m prop)
                                      (in custom ent_rel at level 0,
                                       types custom ent_pat at level 0, m constr at level 0,
                                       prop constr at level 0).
- Notation "<-[ types m prop ]-" := (RelPat right2left None types m prop)
+Notation "<-[ types m prop ]-" := (RelPat right2left None types m prop)
                                      (in custom ent_rel at level 0,
                                       types custom ent_pat at level 0, m constr at level 0,
                                       prop constr at level 0).
- Notation "-[ types m prop ]-" := (RelPat undirected None types m prop)
+Notation "-[ types m prop ]-" := (RelPat undirected None types m prop)
                                     (in custom ent_rel at level 0,
                                      types custom ent_pat at level 0, m constr at level 0,
                                       prop constr at level 0).
@@ -339,38 +357,71 @@ Check MATCH -( :"b":"c" [] )- -[ :"b" 2 [] ]-> -( :"c" [] )-
              <{ 1 }> AS "num",
              <{ 1 + 2 + 3 }> AS "num".             
 
-(** Table **)
-Inductive name : Type :=
-  | Name : string -> name.
-
-Definition record := Map name value.
-Definition table := list record.
-
-
 (*************************************************************************************************)
 (*************************************************************************************************)
+
+Fixpoint id_in_path (p : path) (i : id) : bool :=
+  match p with
+  | PNode _ => false
+  | PMulti id1 id2 p' => if eqb i id1 then true else
+                          if eqb i id2 then true else id_in_path p' i
+  end.
+
+Definition test_path := -(1)--[1]--(4)--[4]--(2)--[6]--(7)-.
+
+Example in_path1 : id_in_path test_path (RelId 1) = true.
+Proof.
+  reflexivity.
+Qed.
+
+Example in_path2 : id_in_path test_path (NodeId 2) = true.
+Proof.
+  reflexivity.
+Qed.
+
+Example not_in_path : id_in_path test_path (RelId 10) = false.
+Proof.
+  reflexivity.
+Qed.
+
+Definition match_rel_pat (r : rel) (p : rel_pat) : bool :=
+  match r, p with
+  | Rel _ _ _ reltype prop , RelPat _ _ types _ prop_pat =>
+    (existsb (fun t => t =? reltype) types) && (map_includes prop prop_pat)
+  end.
+
+Example match_rel_pat1 : match_rel_pat (Rel (NodeId 0) (NodeId 0) (NodeId 0) "foo" [("a", VNum 1); ("b", VStr "c")])
+                                       (RelPat undirected None ["foo"; "bar"] 1 [("a", VNum 1)])
+                                       = true.
+Proof.
+  reflexivity.
+Qed.
+
+Example match_rel_pat2 : match_rel_pat (Rel (NodeId 0) (NodeId 0) (NodeId 0) "foo" [("a", VNum 1); ("b", VStr "c")])
+                                       (RelPat undirected None ["foo"; "bar"] 1 [("c", VNum 1)])
+                                       = false.
+Proof.
+  reflexivity.
+Qed.
+
+Example match_rel_pat3 : match_rel_pat (Rel (NodeId 0) (NodeId 0) (NodeId 0) "foo" [("a", VNum 1); ("b", VStr "c")])
+                                       (RelPat undirected None ["far"] 1 [])
+                                       = false.
+Proof.
+  reflexivity.
+Qed.
+
+Fixpoint refine_paths (g : graph_rd) (init_paths : list path) (n : node_pat) (r : rel_pat) : list path :=
+  match init_paths with
+  | [] => []
+  | path :: init_paths' => 
+  end.
 
 Definition label := string.
 Definition reltype := string.
 
-Record Graph := mkGraph
-{ 
-  (* Set of nodes and their properties *)
-  N : Map id (Map string value)
-  (* Set of relationships and their properties*)
-; R : Map id (Map string value)
-  (* Map a relationship to its source node*)
-; src : Map id id
-  (* Map a relationship to its target node*)
-; tgt : Map id id
-  (* Map a node to a label *)
-; lambda : Map id label
-  (* Map a relationship to a relationship type *)
-; tau : Map id reltype
-}.
-
 Definition is_subset (x y : set id) : bool :=
-  match set_diff id_dec x y with
+  match set_diff id_eq_dec x y with
   | nil => true
   | _ => false
   end.
