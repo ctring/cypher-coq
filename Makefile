@@ -1,6 +1,7 @@
 COQMFFLAGS := -Q . Cypher
 
-ALLVFILES := Map.v \
+ALLVFILES := Decidability.v \
+			 Map.v \
 			 Cypher.v
 
 build: Makefile.coq
