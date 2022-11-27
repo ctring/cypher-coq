@@ -1,8 +1,6 @@
 From Coq Require Import Lists.List. Import ListNotations.
-From Coq Require Import Lists.ListSet.
-From Coq Require Import Bool.Bool Bool.Sumbool.
-From Coq Require Import Arith.Peano_dec.
-From Coq Require Import Strings.String. 
+From Cypher Require Import Decidability.
+
 
 (* ================================================================= *)
 (** ** List-Based Maps *)
@@ -26,50 +24,48 @@ From Coq Require Import Strings.String.
     of the key in the map is the one that appears first in the list;
     that is, later bindings can be shadowed. *)
 
+
+(** The implementation of a map is a simple association list.  If a
+    list contains multiple tuples with the same key, then the binding
+    of the key in the map is the one that appears first in the list;
+    that is, later bindings can be shadowed. *)
+
 Definition Map K V := list (K * V).
 
 (** The [empty] map is the empty list. *)
 
 Definition map_empty {K V} : Map K V := [].
 
-Notation decidable_eq A := (forall x y : A, {x = y} + {x <> y}).
-    
 (** To [get] the binding of an identifier [x], we just need to walk 
     through the list and find the first [cons] cell where the key 
     is equal to [x], if any. *)
-Fixpoint map_get {K V} (H: decidable_eq K) (m : Map K V) (x : K) : option V :=
+
+Fixpoint map_get {K V} `{EqDec K} (m : Map K V) x : option V :=
     match m with
     | [] => None
-    | (k, v) :: m' => if H x k then Some v else map_get H m' x
+    | (k, v) :: m' => if x = k ? then Some v else map_get m' x
     end.
 
 (** To [set] the binding of an identifier, we just need to [cons] 
     it at the front of the list. *) 
 
-Definition map_set {K V} (m : Map K V) (x : K) (v : V) : Map K V :=
-    (x, v) :: m.
+Definition map_set {K V} (m : Map K V) (x : K) (v : V) : Map K V := (x, v) :: m.
 
 (** Finally, the domain of a map is just the set of its keys. *)
-Fixpoint map_dom {K V} (H: decidable_eq K) (m : Map K V) : set K :=
+Fixpoint map_dom {K V} (m : Map K V) : list K :=
     match m with
     | [] => []
-    | (k', v) :: m' => set_add H k' (map_dom H m')
+    | (k', v) :: m' => k' :: map_dom m'
     end.
 
-Definition map_values {K V} (HK: decidable_eq K) 
-                            (HV: decidable_eq V)
-                            (m : Map K V) : set V :=
-    fold_right
-        (fun o sv => match o with
-                 | None => sv
-                 | Some v => set_add HV v sv
-                 end)
-        nil
-        (map (map_get HK m) (map_dom HK m)).
+Fixpoint map_includes_aux {K V} `{EqDec K} `{EqDec V} (m m_included : Map K V) (dom : list K) : bool :=
+    match dom with
+    | [] => true
+    | k :: dom' => if (map_get m k) =? (map_get m_included k) then
+        map_includes_aux m m_included dom'
+    else
+        false
+    end.
 
-Inductive bound_to {K V} (H: decidable_eq K) : Map K V -> K -> V -> Prop :=
-  | Bind : forall x m a, @map_get K V H m x = Some a -> bound_to H m x a.
-
-Local Open Scope string.
-
-Check [("test", 2); ("test", 4)].
+Definition map_includes {K V} `{EqDec K} `{EqDec V} (m m_included : Map K V) : bool :=
+    map_includes_aux m m_included (map_dom m_included).
