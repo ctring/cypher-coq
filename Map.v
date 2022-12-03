@@ -1,3 +1,4 @@
+From Coq Require Import Bool.Bool. Import BoolNotations.
 From Coq Require Import Lists.List. Import ListNotations.
 From Cypher Require Import Decidability.
 
@@ -59,12 +60,17 @@ Fixpoint map_dom {K V} (m : Map K V) : list K :=
     end.
 
 Fixpoint map_includes_aux {K V} `{EqDec K} `{EqDec V} (m m_included : Map K V) (dom : list K) : bool :=
-    match dom with
-    | [] => true
-    | k :: dom' => if (map_get m k) =? (map_get m_included k) then
-        map_includes_aux m m_included dom'
-    else
-        false
+    match m, m_included with
+    | [], [] => true
+    | _, [] => false
+    | [], _ => false
+    | _, _ => match dom with
+              | [] => true
+              | k :: dom' => if (map_get m k) =? (map_get m_included k) then
+                map_includes_aux m m_included dom'
+              else
+                false
+              end
     end.
 
 Definition map_includes {K V} `{EqDec K} `{EqDec V} (m m_included : Map K V) : bool :=
