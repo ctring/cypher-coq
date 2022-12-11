@@ -7,9 +7,9 @@ Open Scope string.
 
 Definition empty_graph := G<>G.
 Definition test_graph := G<
-    -( 1 "person" [("name", VStr "Alice"); ("age", VNum 23); ("marital status", VStr "married")] )-;
-    -( 2 "person" [("name", VStr "Bob"); ("age", VNum 24); ("marital status", VStr "single")])-;
-    -( 3 "person" [("name", VStr "Charlie"); ("age", VNum 30); ("marital status", VStr "married")] )-;
+    -( 1 "person" [("name", VStr "Alice"); ("born in", VNum 1995); ("marital status", VStr "married")] )-;
+    -( 2 "person" [("name", VStr "Bob"); ("born in", VNum 1999); ("marital status", VStr "single")])-;
+    -( 3 "person" [("name", VStr "Charlie"); ("born in", VNum 1994); ("marital status", VStr "married")] )-;
     -( 4 "organization" [("name", VStr "Google"); ("area", VStr "technology")] )-;
     -( 5 "organization" [("name", VStr "Microsoft"); ("area", VStr "technology")] )-;
     -( 6 "organization" [("name", VStr "University of Maryland"); ("area", VStr "education")] )-;
@@ -34,7 +34,7 @@ Definition test_graph := G<
 
 Definition q_all_nodes := MATCH -( "n" :: [] )-
                           RETURN <{ "n"["name"] }> AS "Name",
-                                 <{ "n"["age"] <> VNull }> AS "Is Person",
+                                 <{ "n"["born in"] <> VNull }> AS "Is Person",
                                  <{ "n"["area"] = "education" }> AS "Is University".
 Example q_all_nodes_ok :
   execute test_graph q_all_nodes = [
@@ -56,12 +56,12 @@ Qed.
 (* Names and ages of all people  *)
 Definition q_name_and_age := MATCH -( "p" :"person" [] )-
                              RETURN <{ "p"["name"] }> AS "Name",
-                                    <{ "p"["age"] }> AS "Age".
+                                    <{ 2022 - "p"["born in"] }> AS "Age".
 Example q_name_and_age_ok : 
   execute test_graph q_name_and_age = [
-    [("Name", VStr "Alice"); ("Age", VNum 23)];
-    [("Name", VStr "Bob"); ("Age", VNum 24)];
-    [("Name", VStr "Charlie"); ("Age", VNum 30)]
+    [("Name", VStr "Alice"); ("Age", VNum 27)];
+    [("Name", VStr "Bob"); ("Age", VNum 23)];
+    [("Name", VStr "Charlie"); ("Age", VNum 28)]
   ].
 Proof.
   reflexivity.
@@ -86,13 +86,13 @@ Qed.
 Definition q_from_Washington :=
   MATCH -( :: [("name", VStr "Washington")] )- <-[ :"from":"locates_in" [] ]- -( "entity" :: [] )-
   RETURN <{ "entity"["name"] }> AS "Name",
-         <{ "entity"["age"] }> AS "Age",
+         <{ "entity"["born in"] }> AS "Born In",
          <{ "entity"["area"]}> AS "Area".
 Example q_from_Washington_ok:
   execute test_graph q_from_Washington = [
     [("Name", VStr "University of Washington"); ("Area", VStr "education")];
     [("Name", VStr "Microsoft"); ("Area", VStr "technology")];
-    [("Name", VStr "Charlie"); ("Age", VNum 30)]
+    [("Name", VStr "Charlie"); ("Born In", VNum 1994)]
   ].
 Proof.
   reflexivity.
