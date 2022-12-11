@@ -32,17 +32,36 @@ Definition test_graph := G<
     -( 7 )--[ 13 "locates_in" [] ]->-( 8 )-
   >G.
 
+Definition q_all_nodes := MATCH -( "n" :: [] )-
+                          RETURN <{ "n"["name"] }> AS "Name",
+                                 <{ "n"["age"] <> VNull }> AS "Is Person",
+                                 <{ "n"["area"] = "education" }> AS "Is University".
+Example q_all_nodes_ok :
+  execute test_graph q_all_nodes = [
+    [("Name", VStr "Alice"); ("Is Person", VBool true); ("Is University", VBool false)];
+    [("Name", VStr "Bob"); ("Is Person", VBool true); ("Is University", VBool false)];
+    [("Name", VStr "Charlie"); ("Is Person", VBool true); ("Is University", VBool false)];
+    [("Name", VStr "Google"); ("Is Person", VBool false); ("Is University", VBool false)];
+    [("Name", VStr "Microsoft"); ("Is Person", VBool false); ("Is University", VBool false)];
+    [("Name", VStr "University of Maryland"); ("Is Person", VBool false); ("Is University", VBool true)];
+    [("Name", VStr "University of Washington"); ("Is Person", VBool false); ("Is University", VBool true)];
+    [("Name", VStr "Washington"); ("Is Person", VBool false); ("Is University", VBool false)];
+    [("Name", VStr "New York"); ("Is Person", VBool false); ("Is University", VBool false)];
+    [("Name", VStr "Maryland"); ("Is Person", VBool false); ("Is University", VBool false)]
+  ].
+Proof.
+  reflexivity.
+Qed.
 
-(* Names and ages of all people ("Dummy" column is just to demonstrate constant projection ) *)
+(* Names and ages of all people  *)
 Definition q_name_and_age := MATCH -( "p" :"person" [] )-
                              RETURN <{ "p"["name"] }> AS "Name",
-                                    <{ "p"["age"] }> AS "Age",
-                                    <{ 1 + 1 }> AS "Dummy".
+                                    <{ "p"["age"] }> AS "Age".
 Example q_name_and_age_ok : 
   execute test_graph q_name_and_age = [
-    [("Name", VStr "Alice"); ("Age", VNum 23); ("Dummy", VNum 2)];
-    [("Name", VStr "Bob"); ("Age", VNum 24); ("Dummy", VNum 2)];
-    [("Name", VStr "Charlie"); ("Age", VNum 30); ("Dummy", VNum 2)]
+    [("Name", VStr "Alice"); ("Age", VNum 23)];
+    [("Name", VStr "Bob"); ("Age", VNum 24)];
+    [("Name", VStr "Charlie"); ("Age", VNum 30)]
   ].
 Proof.
   reflexivity.
@@ -96,6 +115,7 @@ Proof.
   reflexivity.
 Qed.
 
+(* People who work in the state they are from *)
 Definition q_people_work_and_come_from_the_same_state :=
   MATCH -( "p" :"person" [] )- -[ :"works_at" [] ]-> 
         -( :: [] )- -[ :"locates_in" [] ]-> 

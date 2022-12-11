@@ -249,14 +249,14 @@ Definition lookup_prop (g : graph) (i : id) (key : string) : option value :=
   | RelId _ => ssrfun.Option.bind (fun rl => map_get (r_prop rl) key) (get_rel g i)
   end.
 
-Fixpoint eval_expr (g : graph) (b : record) (e : expr) : value :=
+Fixpoint eval_expr (g : graph) (r : record) (e : expr) : value :=
   match e with
   | EId i => i
   | ENull => VNull
   | ENum n => n
-  | EPlus e1 e2 => vplus (eval_expr g b e1) (eval_expr g b e2)
-  | EMinus e1 e2 => vminus (eval_expr g b e1) (eval_expr g b e2)
-  | EMult e1 e2 => vmult (eval_expr g b e1) (eval_expr g b e2)
+  | EPlus e1 e2 => vplus (eval_expr g r e1) (eval_expr g r e2)
+  | EMinus e1 e2 => vminus (eval_expr g r e1) (eval_expr g r e2)
+  | EMult e1 e2 => vmult (eval_expr g r e1) (eval_expr g r e2)
   | EStr s => s
   | EPath p => p
   | EProp name propkey => 
@@ -265,11 +265,14 @@ Fixpoint eval_expr (g : graph) (b : record) (e : expr) : value :=
                 | VId i => lookup_prop g i propkey
                 | _ => None
                 end)
-      (map_get b name) in 
+      (map_get r name) in 
         match propval with
         | Some v => v
         | None => VNull
         end
+  | EBool bl => bl
+  | EEq e1 e2 => veq (eval_expr g r e1) (eval_expr g r e2)
+  | ENeq e1 e2 => vneq (eval_expr g r e1) (eval_expr g r e2)
   end.
 
 Fixpoint project_record (g : graph) (r : record) (ret : list (expr * string)) : record :=

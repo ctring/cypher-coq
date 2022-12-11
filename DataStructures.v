@@ -96,7 +96,8 @@ Inductive value : Type :=
   | VNull : value
   | VId   : id -> value
   | VNum  : nat -> value
-  | VStr  : string -> value.
+  | VStr  : string -> value
+  | VBool : bool -> value. 
 
 #[export] Instance eq_value : Eq value :=
 {
@@ -105,6 +106,7 @@ Inductive value : Type :=
                | VNull, VNull => true
                | VNum n1, VNum n2 => (n1 =? n2)%nat
                | VStr s1, VStr s2 => (s1 =? s2)%string
+               | VBool b1, VBool b2 => (b1 =? b2)%bool
                | _, _ => false
                end
 }.
@@ -120,6 +122,8 @@ Proof.
   - injection H as H. apply Nat.eqb_eq. assumption.
   - apply String.eqb_eq in H. rewrite H. reflexivity.
   - injection H as H. apply String.eqb_eq. assumption.
+  - apply -> Bool.eqb_true_iff in H. rewrite H. reflexivity.
+  - injection H as H. apply Bool.eqb_true_iff. assumption.
 Qed.
 
 Definition vplus (v1 v2 : value) :=
@@ -139,7 +143,10 @@ Definition vmult (v1 v2 : value) :=
   | VNum n1, VNum n2 => VNum (n1 * n2)
   | _, _ => VNull
   end.
-  
+
+Definition veq (v1 v2 : value) := VBool (eqb v1 v2). 
+Definition vneq (v1 v2 : value) := VBool (negb (eqb v1 v2)).
+
 Coercion VId : id >-> value.
 Coercion VNum : nat >-> value.
 Coercion VStr : string >-> value.
@@ -165,7 +172,11 @@ Inductive expr : Type :=
   (* Property *)
   | EProp : string -> string -> expr
   (* Path *)
-  | EPath : value -> expr.
+  | EPath : value -> expr
+  (* Bool *)
+  | EBool : value -> expr
+  | EEq : expr -> expr -> expr
+  | ENeq : expr -> expr -> expr.
 
 Definition value_to_expr v :=
   match v with
@@ -173,6 +184,7 @@ Definition value_to_expr v :=
   | VNull => ENull
   | VNum _ => ENum v
   | VStr _ => EStr v
+  | VBool _ => EBool v
   end.
 
 Coercion value_to_expr : value >-> expr. 
@@ -180,6 +192,8 @@ Coercion value_to_expr : value >-> expr.
 Declare Custom Entry ent_expr.
 Notation "<{ e }>"  := e (at level 0, e custom ent_expr at level 99).
 Notation "x"        := (value_to_expr x) (in custom ent_expr at level 0, x constr at level 0).
+Notation "x = y"    := (EEq x y) (in custom ent_expr at level 60, left associativity).
+Notation "x <> y"   := (ENeq x y) (in custom ent_expr at level 60, left associativity).
 Notation "x + y"    := (EPlus x y) (in custom ent_expr at level 50, left associativity).
 Notation "x - y"    := (EMinus x y) (in custom ent_expr at level 50, left associativity).
 Notation "x * y"    := (EMult x y) (in custom ent_expr at level 40, left associativity).
