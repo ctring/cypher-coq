@@ -62,7 +62,7 @@ Fixpoint map_dom {K V} (m : Map K V) : list K :=
 Fixpoint map_includes_aux {K V} `{EqDec K} `{EqDec V} (m m_included : Map K V) (dom : list K) : bool :=
     match m, m_included with
     | [], [] => true
-    | _, [] => false
+    | _, [] => true
     | [], _ => false
     | _, _ => match dom with
               | [] => true

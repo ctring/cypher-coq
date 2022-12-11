@@ -118,14 +118,21 @@ Proof.
   reflexivity.
 Qed.
 
-Example match_node_pat2 : match_node_pat (NodePat None ["foo"; "bar"] [("a", VNum 1)])
+Example match_node_pat2 : match_node_pat (NodePat None ["foo"; "bar"] [])
+                                         (Node (NodeId 0) "foo" [("a", VNum 1); ("b", VStr "c")])
+                                         = true.
+Proof.
+  reflexivity.
+Qed.
+
+Example match_node_pat3 : match_node_pat (NodePat None ["foo"; "bar"] [("a", VNum 1)])
                                          (Node (NodeId 0) "foo" [("b", VStr "c")])
                                          = false.
 Proof.
   reflexivity.
 Qed.
 
-Example match_node_pat3 : match_node_pat (NodePat None ["foo"; "bar"] [])
+Example match_node_pat4 : match_node_pat (NodePat None ["foo"; "bar"] [])
                                          (Node (NodeId 0) "far" [("b", VStr "c")])
                                          = false.
 Proof.
@@ -193,12 +200,12 @@ Definition refine_path (g : graph) (np : node_pat) (rp : rel_pat) (p : path) : l
   (* Keep relationships that connect the head of the path to a
      matching node in the matching direction *)
   let nodes_rels := map (match_direction (hd_path p) (map n_id nodes) rp) rels in
-    (* Create extended paths (ep) by combining current path with
+    (* Create extended paths by combining current path with
        the new relationships and nodes *)
-    fold_left (fun ep nr => match nr with
-                            | None => ep
-                            | Some (nid, rid) => (PathNodeRel nid rid p) :: ep
-                            end)  
+    fold_left (fun prev nr => match nr with
+                              | None => prev
+                              | Some (nid, rid) => (PathNodeRel nid rid p) :: prev
+                              end)  
               nodes_rels [].
 
 Fixpoint pattern_match (g : graph) (p : pattern) : list path :=
@@ -207,25 +214,33 @@ Fixpoint pattern_match (g : graph) (p : pattern) : list path :=
   | PatNodeRel np rp p' => flat_map (refine_path g np rp) (pattern_match g p')
   end.
 
-Fixpoint bind_path (g : graph) (p : pattern) (pth : path) : record :=
+Definition record_set (r : record) (k : string) (v : value) : option record :=
+  match map_get r k with
+  | None => Some (map_set r k v)
+  | Some v' => if eqb v v' then Some r else None
+  end.
+
+Fixpoint bind_path (g : graph) (p : pattern) (pth : path) : option record :=
   let nodes := get_nodes g in
   let rels := get_rels g in
     match p, pth with
-    | PatNode (NodePat (Some name) _ _), PathNode i => map_set map_empty name (VId i)
+    | PatNode (NodePat (Some name) _ _), PathNode i => Some (map_set map_empty name (VId i))
     | PatNodeRel np rp p', PathNodeRel ni ri pth' =>
       (* Bind the rest of the pattern *)
       let rec := bind_path g p' pth' in
       (* Bind the current relationship *)
-      let rec := match rp_name rp with
-                 | Some name => map_set rec name ri
-                 | _ => rec
+      let rec := match rec, rp_name rp with
+                 | None, _ => None
+                 | Some r, Some name => record_set r name ri 
+                 | _, _ => rec
                  end in
         (* Bind the current node *)
-        match np_name np with
-        | Some name => map_set rec name ni
-        | _ => rec
+        match rec, np_name np with
+        | None, _ => None
+        | Some r, Some name => record_set r name ni
+        | _, _ => rec
         end
-    | _, _ => map_empty
+    | _, _ => Some map_empty
     end. 
 
 Definition lookup_prop (g : graph) (i : id) (key : string) : option value :=
@@ -260,9 +275,13 @@ Fixpoint eval_expr (g : graph) (b : record) (e : expr) : value :=
 Fixpoint project_record (g : graph) (r : record) (ret : list (expr * string)) : record :=
   match ret with
   | [] => []
-  | (e, name) :: ret' => map_set (project_record g r ret')
-                                 name
-                                 (eval_expr g r e)
+  | (e, name) :: ret' => 
+    let v := eval_expr g r e in
+    let rec' := project_record g r ret' in
+      match v with
+      | VNull => rec'
+      | _ => map_set rec' name v
+      end 
   end.
 
 Fixpoint project (g : graph) (ret : list (expr * string)) (t : table) : table :=
@@ -271,19 +290,12 @@ Fixpoint project (g : graph) (ret : list (expr * string)) (t : table) : table :=
   | rec :: t' => (project_record g rec ret) :: (project g ret t')
   end.
 
-Definition test_pattern :=  ?? 
-                            -( "s" :"state" [] )- <-[ :: [] ]- -( "p" :"person" [] )-
-                            ??.
-
-(* Compute projected_table. *)
-
 Definition execute (g : graph) (q : query) : table :=
   let paths := pattern_match g (q_pat q) in
-  let bounded_paths := map (bind_path g (q_pat q)) paths in
+  let bounded_paths := fold_left (
+    fun prev p =>
+      match (bind_path g (q_pat q) p) with
+      | None => prev
+      | Some rec => rec :: prev
+      end) paths [] in
     project g (q_ret q) bounded_paths.
-
-Definition test_query := MATCH -( "s" :"state":"organization" [] )- -[ :: [] ]- -( "p" :"person" [] )-
-                         RETURN <{ "p"["name"] }> AS "who",
-                                <{ "s"["name"] }> AS "where",
-                                <{ 1 }> AS "one".
-
