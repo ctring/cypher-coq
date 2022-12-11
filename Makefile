@@ -2,7 +2,9 @@ COQMFFLAGS := -Q . Cypher
 
 ALLVFILES := Decidability.v \
 			 Map.v \
-			 Cypher.v
+			 DataStructures.v \
+			 Query.v \
+			 Examples.v
 
 build: Makefile.coq
 	$(MAKE) -f Makefile.coq
