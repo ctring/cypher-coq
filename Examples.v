@@ -32,23 +32,24 @@ Definition test_graph := G<
     -( 7 )--[ 13 "locatesIn" [] ]->-( 8 )-
   >G.
 
+(* Match with all possible nodes. Some extra columns to demonstrate expression evaluation *)
 Definition q_all_nodes := MATCH -( "n" :: [] )-
                           RETURN <{ "n"["name"] }> AS "Name",
                                  <{ "n"["bornIn"] <> VNull }> AS "Is Person",
-                                 <{ "n"["area"] = "education" }> AS "Is University".
-
+                                 <{ "n"["area"] = "education" }> AS "Is University",
+                                 <{ "n"["bornIn"] = VNull && "n"["area"] = VNull }> AS "Is State".
 Example q_all_nodes_ok :
   execute test_graph q_all_nodes = [
-    [("Name", VStr "Alice"); ("Is Person", VBool true); ("Is University", VBool false)];
-    [("Name", VStr "Bob"); ("Is Person", VBool true); ("Is University", VBool false)];
-    [("Name", VStr "Charlie"); ("Is Person", VBool true); ("Is University", VBool false)];
-    [("Name", VStr "Google"); ("Is Person", VBool false); ("Is University", VBool false)];
-    [("Name", VStr "Microsoft"); ("Is Person", VBool false); ("Is University", VBool false)];
-    [("Name", VStr "University of Maryland"); ("Is Person", VBool false); ("Is University", VBool true)];
-    [("Name", VStr "University of Washington"); ("Is Person", VBool false); ("Is University", VBool true)];
-    [("Name", VStr "Washington"); ("Is Person", VBool false); ("Is University", VBool false)];
-    [("Name", VStr "New York"); ("Is Person", VBool false); ("Is University", VBool false)];
-    [("Name", VStr "Maryland"); ("Is Person", VBool false); ("Is University", VBool false)]
+    [("Name", VStr "Alice"); ("Is Person", VBool true); ("Is University", VBool false); ("Is State", VBool false)];
+    [("Name", VStr "Bob"); ("Is Person", VBool true); ("Is University", VBool false); ("Is State", VBool false)];
+    [("Name", VStr "Charlie"); ("Is Person", VBool true); ("Is University", VBool false); ("Is State", VBool false)];
+    [("Name", VStr "Google"); ("Is Person", VBool false); ("Is University", VBool false); ("Is State", VBool false)];
+    [("Name", VStr "Microsoft"); ("Is Person", VBool false); ("Is University", VBool false); ("Is State", VBool false)];
+    [("Name", VStr "University of Maryland"); ("Is Person", VBool false); ("Is University", VBool true); ("Is State", VBool false)];
+    [("Name", VStr "University of Washington"); ("Is Person", VBool false); ("Is University", VBool true); ("Is State", VBool false)];
+    [("Name", VStr "Washington"); ("Is Person", VBool false); ("Is University", VBool false); ("Is State", VBool true)];
+    [("Name", VStr "New York"); ("Is Person", VBool false); ("Is University", VBool false); ("Is State", VBool true)];
+    [("Name", VStr "Maryland"); ("Is Person", VBool false); ("Is University", VBool false); ("Is State", VBool true)]
   ].
 Proof.
   reflexivity.
@@ -69,7 +70,7 @@ Proof.
   reflexivity.
 Qed.
 
-(* Names and workplaces of married people *)
+(* Names, workplaces, and years of work of married people *)
 Definition q_workplace_of_married_people :=
   MATCH -( "p" :"person" [("marital status", VStr "married")] )- -[ "w" :"worksAt" [] ]-> -( "o" :"organization" [] )-
   RETURN <{ "p"["name"] }> AS "Name",
@@ -120,7 +121,8 @@ Proof.
   reflexivity.
 Qed.
 
-(* People who work in the state they are from *)
+(* People who work in the state they are from. Note that the first and last node share the same name, which 
+   dictates that they must match the same node. *)
 Definition q_people_work_and_come_from_the_same_state :=
   MATCH -( "p" :"person" [] )- -[ :"worksAt" [] ]-> 
         -( :: [] )- -[ :"locatesIn" [] ]-> -( "s" :: [] )-

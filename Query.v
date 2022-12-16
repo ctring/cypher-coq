@@ -193,7 +193,7 @@ Check (compose negb (compose (id_in_path (PathNode (NodeId 1))) r_id)).
 Definition refine_path (g : graph) (np : node_pat) (rp : rel_pat) (p : path) : list path :=
   (* Keep nodes that match the node pattern *)
   let nodes := filter (match_node_pat np) (get_nodes g) in
-  (* Keep relationships that matche the relationship pattern *)
+  (* Keep relationships that match the relationship pattern *)
   let rels  := filter (match_rel_pat rp) (get_rels g) in
   (* Filter out relationships that already exists in the path *)
   let rels  := filter  (compose negb (compose (id_in_path p) r_id)) rels in
@@ -273,6 +273,9 @@ Fixpoint eval_expr (g : graph) (r : record) (e : expr) : value :=
   | EBool bl => bl
   | EEq e1 e2 => veq (eval_expr g r e1) (eval_expr g r e2)
   | ENeq e1 e2 => vneq (eval_expr g r e1) (eval_expr g r e2)
+  | ENot e => vnot (eval_expr g r e)
+  | EAnd e1 e2 => vand (eval_expr g r e1) (eval_expr g r e2)
+  | EOr e1 e2 => vor (eval_expr g r e1) (eval_expr g r e2)
   end.
 
 Fixpoint project_record (g : graph) (r : record) (ret : list (expr * string)) : record :=

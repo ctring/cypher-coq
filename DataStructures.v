@@ -144,8 +144,26 @@ Definition vmult (v1 v2 : value) :=
   | _, _ => VNull
   end.
 
-Definition veq (v1 v2 : value) := VBool (eqb v1 v2). 
+Definition veq (v1 v2 : value) := VBool (eqb v1 v2).
 Definition vneq (v1 v2 : value) := VBool (negb (eqb v1 v2)).
+
+Definition vnot (v : value) := 
+  match v with
+  | VBool b => VBool (negb b)
+  | _ => VNull
+  end.
+
+Definition vand (v1 v2 : value) :=
+  match v1, v2 with
+  | VBool b1, VBool b2 => VBool (andb b1 b2)
+  | _, _ => VNull
+  end.
+
+Definition vor (v1 v2 : value) :=
+  match v1, v2 with
+  | VBool b1, VBool b2 => VBool (orb b1 b2)
+  | _, _ => VNull
+  end.  
 
 Coercion VId : id >-> value.
 Coercion VNum : nat >-> value.
@@ -176,7 +194,10 @@ Inductive expr : Type :=
   (* Bool *)
   | EBool : value -> expr
   | EEq : expr -> expr -> expr
-  | ENeq : expr -> expr -> expr.
+  | ENeq : expr -> expr -> expr
+  | ENot : expr -> expr
+  | EAnd : expr -> expr -> expr
+  | EOr : expr -> expr -> expr.
 
 Definition value_to_expr v :=
   match v with
@@ -192,6 +213,9 @@ Coercion value_to_expr : value >-> expr.
 Declare Custom Entry ent_expr.
 Notation "<{ e }>"  := e (at level 0, e custom ent_expr at level 99).
 Notation "x"        := (value_to_expr x) (in custom ent_expr at level 0, x constr at level 0).
+Notation "~ x"      := (ENot x) (in custom ent_expr at level 80).
+Notation "x && y"   := (EAnd x y) (in custom ent_expr at level 70, left associativity).
+Notation "x || y"   := (EOr x y) (in custom ent_expr at level 65, left associativity).
 Notation "x = y"    := (EEq x y) (in custom ent_expr at level 60, left associativity).
 Notation "x <> y"   := (ENeq x y) (in custom ent_expr at level 60, left associativity).
 Notation "x + y"    := (EPlus x y) (in custom ent_expr at level 50, left associativity).
